@@ -1,25 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const RedirectLog = require('../models/RedirectLog'); // Adjust path if needed
+const RedirectLog = require('../models/RedirectLog'); 
+const Project = require('../models/Project'); 
 
-async function logRedirect(req, status) {
-  try {
-    await RedirectLog.create({
-      uid: req.query.uid,
-      pid: req.query.pid,
-      status,
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-      location: req.location, // You need to set this in middleware if you want geoIP
-      fingerprint: req.query.fingerprint, // If sent from client
-    });
-  } catch (err) {
-    console.error('Redirect log error:', err);
-  }
-}
-
-
-router.get('/success', async (req, res) => {
+async function handleRedirect(req, res, status) {
   let uid, pid, fingerprint;
   if (!req.query.encrypt) {
     return res.status(400).send('Missing encrypt parameter');
@@ -34,25 +18,17 @@ router.get('/success', async (req, res) => {
     pid = undefined;
     fingerprint = undefined;
   }
-  req.query.uid = uid;
-  req.query.pid = pid;
-  req.query.fingerprint = fingerprint;
-
-  // Find project name by pid
   let projectName = '';
   if (pid) {
     const project = await Project.findOne({ pid });
     if (project) projectName = project.name;
   }
-  req.query.projectName = projectName;
-
-  // Log with projectName
   try {
     await RedirectLog.create({
       uid,
       pid,
       projectName,
-      status: 'completed',
+      status,
       ip: req.ip,
       userAgent: req.headers['user-agent'],
       location: req.location,
@@ -61,21 +37,16 @@ router.get('/success', async (req, res) => {
   } catch (err) {
     console.error('Redirect log error:', err);
   }
+  let statusMsg = {
+    completed: `✅ Survey completed! UID: ${uid}`,
+    terminate: `❌ Survey terminated. UID: ${uid}`,
+    quotafull: `🚫 Quota full. UID: ${uid}`
+  };
+  res.send(statusMsg[status]);
+}
 
-  res.send(`✅ Survey completed! UID: ${uid}`);
-});
-
-
-router.get('/terminate', async (req, res) => {
-  await logRedirect(req, 'terminate');
-  const { encrypt } = req.query;
-  res.send(`❌ Survey terminated. Encrypted ID: ${encrypt}`);
-});
-
-router.get('/quotafull', async (req, res) => {
-  await logRedirect(req, 'quotafull');
-  const { encrypt } = req.query;
-  res.send(`🚫 Quota full. Encrypted ID: ${encrypt}`);
-});
+router.get('/success', (req, res) => handleRedirect(req, res, 'completed'));
+router.get('/terminate', (req, res) => handleRedirect(req, res, 'terminate'));
+router.get('/quotafull', (req, res) => handleRedirect(req, res, 'quotafull'));
 
 module.exports = router;
