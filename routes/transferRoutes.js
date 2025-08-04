@@ -22,31 +22,27 @@ async function handleTransfer(req, res, status) {
   if (!req.query.encrypt) {
     return res.status(400).send('Missing encrypt parameter');
   }
+
   try {
-    // Try to decode as base64 JSON
     const payload = JSON.parse(Buffer.from(req.query.encrypt, 'base64').toString());
     uid = payload.uid;
     pid = payload.pid;
     fingerprint = payload.fingerprint;
   } catch (e) {
-    // If not valid, treat encrypt as uid only
     uid = req.query.encrypt;
     pid = undefined;
     fingerprint = undefined;
   }
 
-  // Look up project name if pid is present
   let projectName = '';
   if (pid) {
     const project = await Project.findOne({ pid });
     if (project) projectName = project.name;
   }
 
-  // Get IP and user agent
   const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || 'unknown';
   const userAgent = req.headers['user-agent'];
 
-  // Get geo location info for IP
   let location = {};
   try {
     const geo = await axios.get(`http://ip-api.com/json/${ip}`);
@@ -55,7 +51,6 @@ async function handleTransfer(req, res, status) {
     location = { error: 'Geo lookup failed' };
   }
 
-  // Save redirect log
   try {
     await RedirectLog.create({
       uid,
@@ -71,14 +66,15 @@ async function handleTransfer(req, res, status) {
     console.error('Redirect log error:', err);
   }
 
-  // Status messages
   const statusMsg = {
-    completed: `✅ Survey completed! UID: Complered`,
-    terminate: `❌ Survey terminated. UID: Terminated`,
-    quotafull: `🚫 Quota full. UID: Quotafull`
+    completed: `✅ Survey completed! UID: ${uid}`,
+    terminate: `❌ Survey terminated. UID: ${uid}`,
+    quotafull: `🚫 Quota full. UID: ${uid}`
   };
+
   res.send(statusMsg[status]);
 }
+
 
 // Routes for all three statuses
 router.get('/success', (req, res) => handleTransfer(req, res, 'completed'));
