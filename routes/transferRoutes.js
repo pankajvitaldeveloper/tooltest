@@ -30,6 +30,11 @@ async function handleTransfer(req, res, status) {
   try {
     // Decode encrypted payload
     if (encrypt) {
+      // Check if encrypt is a URL (common mistake)
+      if (encrypt.startsWith('http')) {
+        console.error('Invalid encrypt parameter: URL provided instead of base64', { encrypt });
+        return res.status(400).send('Invalid encrypt parameter: Expected base64 string, received URL');
+      }
       try {
         const payload = JSON.parse(Buffer.from(encrypt, 'base64').toString('utf-8'));
         uid = payload.uid;
@@ -41,7 +46,7 @@ async function handleTransfer(req, res, status) {
         }
       } catch (err) {
         console.error('Decrypt error:', { encrypt, error: err.message });
-        return res.status(400).send('Invalid encrypt parameter');
+        return res.status(400).send('Invalid encrypt parameter: Failed to decode base64');
       }
     } else {
       uid = toid; // Fallback to toid if encrypt is missing
@@ -54,7 +59,7 @@ async function handleTransfer(req, res, status) {
         projectName = project ? project.name : '';
       } catch (err) {
         console.error('Project lookup error:', { pid, error: err.message });
-        // Continue without projectName to avoid blocking
+        // Continue without projectName
       }
     }
 
@@ -70,7 +75,7 @@ async function handleTransfer(req, res, status) {
     let location = {};
     try {
       const geo = await axios.get(`http://ip-api.com/json/${ip}`, {
-        timeout: 5000, // 5-second timeout
+        timeout: 5000,
       });
       location = geo.data || { error: 'Geo lookup failed' };
     } catch (err) {
@@ -98,7 +103,7 @@ async function handleTransfer(req, res, status) {
         status,
         error: err.message,
       });
-      // Continue to respond even if logging fails
+      // Continue to respond
     }
 
     // Respond with appropriate message
