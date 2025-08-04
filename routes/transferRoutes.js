@@ -22,67 +22,103 @@ async function handleTransfer(req, res, status) {
 
   // Validate inputs
   if (!encrypt && !toid) {
+    console.error('Missing required parameters:', { encrypt, toid });
     return res.status(400).send('Missing encrypt or toid parameter');
   }
 
   let uid, pid, fingerprint, projectName = '';
   try {
-    // Attempt to decode encrypted payload
+    // Decode encrypted payload
     if (encrypt) {
-      const payload = JSON.parse(Buffer.from(encrypt, 'base64').toString());
-      uid = payload.uid;
-      pid = payload.pid;
-      fingerprint = payload.fingerprint;
-      if (pid) {
-        const project = await Project.findOne({ pid });
-        projectName = project ? project.name : '';
+      try {
+        const payload = JSON.parse(Buffer.from(encrypt, 'base64').toString('utf-8'));
+        uid = payload.uid;
+        pid = payload.pid;
+        fingerprint = payload.fingerprint || null;
+        if (!uid) {
+          console.error('Invalid payload: missing uid', { payload });
+          return res.status(400).send('Invalid encrypt parameter: missing uid');
+        }
+      } catch (err) {
+        console.error('Decrypt error:', { encrypt, error: err.message });
+        return res.status(400).send('Invalid encrypt parameter');
       }
     } else {
       uid = toid; // Fallback to toid if encrypt is missing
     }
+
+    // Fetch project name if pid is available
+    if (pid) {
+      try {
+        const project = await Project.findOne({ pid }).lean();
+        projectName = project ? project.name : '';
+      } catch (err) {
+        console.error('Project lookup error:', { pid, error: err.message });
+        // Continue without projectName to avoid blocking
+      }
+    }
+
+    // Get IP and user agent
+    const ip =
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.socket?.remoteAddress ||
+      req.ip ||
+      'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+
+    // Fetch geolocation
+    let location = {};
+    try {
+      const geo = await axios.get(`http://ip-api.com/json/${ip}`, {
+        timeout: 5000, // 5-second timeout
+      });
+      location = geo.data || { error: 'Geo lookup failed' };
+    } catch (err) {
+      console.error('Geolocation API error:', { ip, error: err.message });
+      location = { error: 'Geo lookup failed', details: err.message };
+    }
+
+    // Log the final status
+    try {
+      await RedirectLog.create({
+        uid,
+        pid: pid || null,
+        projectName,
+        status,
+        ip,
+        userAgent,
+        location,
+        fingerprint: fingerprint || null,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error('RedirectLog create error:', {
+        uid,
+        pid,
+        status,
+        error: err.message,
+      });
+      // Continue to respond even if logging fails
+    }
+
+    // Respond with appropriate message
+    const statusMsg = {
+      completed: `✅ Survey completed! UID: ${uid}`,
+      terminate: `❌ Survey terminated. UID: ${uid}`,
+      quotafull: `🚫 Quota full. UID: ${uid}`,
+    };
+
+    return res.send(statusMsg[status] || `Invalid status: ${status}`);
   } catch (err) {
-    console.error('Decrypt Error:', err);
-    uid = toid || 'unknown';
-  }
-
-  // Get IP and user agent
-  const ip = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || req.ip || 'unknown';
-  const userAgent = req.headers['user-agent'] || 'unknown';
-
-  // Fetch geolocation
-  let location = {};
-  try {
-    const geo = await axios.get(`http://ip-api.com/json/${ip}`);
-    location = geo.data || { error: 'Geo lookup failed' };
-  } catch {
-    location = { error: 'Geo lookup failed' };
-  }
-
-  // Log the final status
-  try {
-    await RedirectLog.create({
-      uid,
-      pid: pid || null,
-      projectName,
+    console.error('HandleTransfer error:', {
+      encrypt,
+      toid,
       status,
-      ip,
-      userAgent,
-      location,
-      fingerprint: fingerprint || null,
-      createdAt: new Date(),
+      error: err.message,
+      stack: err.stack,
     });
-  } catch (err) {
-    console.error('Redirect Log Error:', err);
+    return res.status(500).send('Server error');
   }
-
-  // Respond with appropriate message
-  const statusMsg = {
-    completed: `✅ Survey completed! UID: ${uid}`,
-    terminate: `❌ Survey terminated. UID: ${uid}`,
-    quotafull: `🚫 Quota full. UID: ${uid}`,
-  };
-
-  res.send(statusMsg[status] || 'Invalid status');
 }
 
 router.get('/success', (req, res) => handleTransfer(req, res, 'completed'));
