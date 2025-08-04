@@ -73,9 +73,9 @@ async function handleTransfer(req, res, status) {
 
   // Status messages
   const statusMsg = {
-    completed: `✅ Survey completed! UID: ${uid}`,
-    terminate: `❌ Survey terminated. UID: ${uid}`,
-    quotafull: `🚫 Quota full. UID: ${uid}`
+    completed: `✅ Survey completed! UID: Complered`,
+    terminate: `❌ Survey terminated. UID: Terminated`,
+    quotafull: `🚫 Quota full. UID: Quotafull`
   };
   res.send(statusMsg[status]);
 }
