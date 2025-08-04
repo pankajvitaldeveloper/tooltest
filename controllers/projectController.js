@@ -60,62 +60,62 @@ exports.updateProject = async (req, res) => {
 };
 
 
-const crypto = require('crypto');
+// const crypto = require('crypto');
 
-// Helper to encrypt UID
-const encryptUID = (uid) => {
-  const cipher = crypto.createCipher('aes-256-cbc', process.env.ENCRYPT_SECRET || 'mysecret');
-  let encrypted = cipher.update(uid, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return encrypted;
-};
+// // Helper to encrypt UID
+// const encryptUID = (uid) => {
+//   const cipher = crypto.createCipher('aes-256-cbc', process.env.ENCRYPT_SECRET || 'mysecret');
+//   let encrypted = cipher.update(uid, 'utf8', 'hex');
+//   encrypted += cipher.final('hex');
+//   return encrypted;
+// };
 
-exports.handleRedirect = async (req, res) => {
-  const { code } = req.params; // encoded PID
-  const { status, fingerprint, toid } = req.query;
+// exports.handleRedirect = async (req, res) => {
+//   const { code } = req.params; // encoded PID
+//   const { status, fingerprint, toid } = req.query;
 
-  try {
-    const pid = Buffer.from(code, 'base64').toString('utf-8');
-    const project = await Project.findOne({ pid });
-    if (!project) return res.status(404).send('Invalid PID');
+//   try {
+//     const pid = Buffer.from(code, 'base64').toString('utf-8');
+//     const project = await Project.findOne({ pid });
+//     if (!project) return res.status(404).send('Invalid PID');
 
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'];
+//     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+//     const userAgent = req.headers['user-agent'];
 
-    let location = {};
-    try {
-      const geo = await axios.get(`http://ip-api.com/json/${ip}`);
-      location = geo.data;
-    } catch {
-      location = { error: 'Geo lookup failed' };
-    }
+//     let location = {};
+//     try {
+//       const geo = await axios.get(`http://ip-api.com/json/${ip}`);
+//       location = geo.data;
+//     } catch {
+//       location = { error: 'Geo lookup failed' };
+//     }
 
-    await RedirectLog.create({
-      uid: toid,
-      pid,
-      status,
-      fingerprint,
-      ip,
-      userAgent,
-      location
-    });
+//     await RedirectLog.create({
+//       uid: toid,
+//       pid,
+//       status,
+//       fingerprint,
+//       ip,
+//       userAgent,
+//       location
+//     });
 
-    const encrypted = encryptUID(toid);
+//     const encrypted = encryptUID(toid);
 
-    // Redirect to internal tool transfer endpoint based on status
-    if (status === 'completed') {
-      return res.redirect(`https://tooltest.onrender.com/transfer/success?encrypt=${encrypted}`);
-    } else if (status === 'terminate') {
-      return res.redirect(`https://tooltest.onrender.com/transfer/terminate?encrypt=${encrypted}`);
-    } else if (status === 'quotafull') {
-      return res.redirect(`https://tooltest.onrender.com/transfer/quotafull?encrypt=${encrypted}`);
-    } else {
-      // Default: still send to survey link with UID replaced
-      const finalSurveyLink = project.surveyLink.replace('[UID]', toid);
-      return res.redirect(finalSurveyLink);
-    }
+//     // Redirect to internal tool transfer endpoint based on status
+//     if (status === 'completed') {
+//       return res.redirect(`https://tooltest.onrender.com/transfer/success?encrypt=${encrypted}`);
+//     } else if (status === 'terminate') {
+//       return res.redirect(`https://tooltest.onrender.com/transfer/terminate?encrypt=${encrypted}`);
+//     } else if (status === 'quotafull') {
+//       return res.redirect(`https://tooltest.onrender.com/transfer/quotafull?encrypt=${encrypted}`);
+//     } else {
+//       // Default: still send to survey link with UID replaced
+//       const finalSurveyLink = project.surveyLink.replace('[UID]', toid);
+//       return res.redirect(finalSurveyLink);
+//     }
 
-  } catch (err) {
-    res.status(500).send('Server error');
-  }
-};
+//   } catch (err) {
+//     res.status(500).send('Server error');
+//   }
+// };
