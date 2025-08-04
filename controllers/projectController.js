@@ -21,7 +21,7 @@ exports.createProject = async (req, res) => {
     await newProject.save();
 
     // Prepare payload for encrypt param
-    const payload = { pid }; // You can add more fields if needed
+    const payload = { uid,pid}; // You can add more fields if needed
     const encrypt = Buffer.from(JSON.stringify(payload)).toString('base64');
 
     // Generate all 3 redirect URLs
