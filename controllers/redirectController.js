@@ -5,51 +5,60 @@ const axios = require('axios');
 
 
 exports.handleRedirect = async (req, res) => {
-  const { code } = req.params; // encoded PID
-  const { status, fingerprint, toid } = req.query;
+  const { code } = req.params; // Encoded PID
+  const { status = 'redirected', fingerprint, toid } = req.query;
+
+  // Validate inputs
+  if (!code || !toid) {
+    return res.status(400).send('Missing code or toid parameter');
+  }
 
   try {
+    // Decode PID
     const pid = Buffer.from(code, 'base64').toString('utf-8');
     const project = await Project.findOne({ pid });
-    if (!project) return res.status(404).send('Invalid PID');
+    if (!project) {
+      return res.status(404).send('Invalid PID');
+    }
 
+    // Get IP and user agent
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
-    const userAgent = req.headers['user-agent'];
+    const userAgent = req.headers['user-agent'] || 'unknown';
 
+    // Fetch geolocation
     let location = {};
     try {
       const geo = await axios.get(`http://ip-api.com/json/${ip}`);
-      location = geo.data;
+      location = geo.data || { error: 'Geo lookup failed' };
     } catch {
       location = { error: 'Geo lookup failed' };
     }
 
+    // Log the redirect
     await RedirectLog.create({
       uid: toid,
       pid,
-      status: 'redirected',
-      fingerprint,
+      projectName: project.name,
+      status: status || 'redirected',
+      fingerprint: fingerprint || null,
       ip,
       userAgent,
-      location
+      location,
+      createdAt: new Date(),
     });
 
-    // Encrypt full payload (uid, pid, fingerprint) to be used *later* after survey
-    const encrypted = Buffer.from(JSON.stringify({
-      uid: toid,
-      pid,
-      fingerprint
-    })).toString('base64');
+    // Encrypt payload for survey callback
+    const payload = JSON.stringify({ uid: toid, pid, fingerprint: fingerprint || null });
+    const encrypted = Buffer.from(payload).toString('base64');
 
-    // Replace [UID] and append encrypted param to survey link
+    // Construct final survey link
     const finalSurveyLink = project.surveyLink
       .replace('[UID]', toid)
-      .concat(`&encrypt=${encrypted}`); // <-- optional: pass to survey so they can callback
+      .concat(`&encrypt=${encrypted}`);
 
     return res.redirect(finalSurveyLink);
-
   } catch (err) {
-    console.error('Redirect error:', err);
+    console.error('Redirect Error:', err);
     res.status(500).send('Server error');
   }
 };

@@ -52,6 +52,7 @@ exports.createProject = async (req, res) => {
   try {
     const { name, pid, clientName, surveyLink, description } = req.body;
 
+    // Validate required fields
     if (!pid || !surveyLink) {
       return res.status(400).json({ message: 'PID and surveyLink are required' });
     }
@@ -61,26 +62,25 @@ exports.createProject = async (req, res) => {
       pid,
       clientName,
       surveyLink,
-      description
+      description,
     });
 
     await newProject.save();
 
-    // Encode the PID to base64 to generate a unique redirect URL
+    // Encode PID to base64 for redirect URL
     const encodedPID = Buffer.from(pid).toString('base64');
     const generatedRedirect = `https://tooltest.onrender.com/redirect/${encodedPID}?toid=[TOID]`;
 
     res.status(201).json({
       message: 'Project created successfully',
       project: newProject,
-      generatedRedirect
+      generatedRedirect,
     });
   } catch (err) {
     console.error('Create Project Error:', err);
     res.status(500).json({ message: 'Server Error', error: err.message });
   }
 };
-
 
 
 // Get all projects
