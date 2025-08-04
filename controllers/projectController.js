@@ -22,7 +22,7 @@ exports.createProject = async (req, res) => {
 
     // Encode the PID to base64 to generate a unique redirect URL
     const encodedPID = Buffer.from(pid).toString('base64');
-    const generatedRedirect = `http://localhost:5000/redirect/${encodedPID}?toid=[TOID]`;
+    const generatedRedirect = `https://tooltest.onrender.com/redirect/${encodedPID}?toid=[TOID]`;
 
     res.status(201).json({
       message: 'Project created successfully',
