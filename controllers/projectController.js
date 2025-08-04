@@ -20,6 +20,9 @@ exports.createProject = async (req, res) => {
 
     await newProject.save();
 
+    const encodedPID = Buffer.from(pid).toString('base64');
+    const generatedRedirect = `https://tooltest.onrender.com/redirect/${encodedPID}?toid=[TOID]`;
+
     // Prepare payload for encrypt param
     const payload = { pid, clientName }; // You can add more fields if needed
     const encrypt = Buffer.from(JSON.stringify(payload)).toString('base64');
@@ -35,7 +38,8 @@ exports.createProject = async (req, res) => {
       project: newProject,
       successRedirect,
       terminateRedirect,
-      quotafullRedirect
+      quotafullRedirect,
+      generatedRedirect
     });
   } catch (err) {
     console.error('Create Project Error:', err);
