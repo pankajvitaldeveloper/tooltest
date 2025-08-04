@@ -104,11 +104,11 @@ exports.handleRedirect = async (req, res) => {
 
     // Redirect to internal tool transfer endpoint based on status
     if (status === 'completed') {
-      return res.redirect(`http://localhost:5000/transfer/success?encrypt=${encrypted}`);
+      return res.redirect(`https://tooltest.onrender.com/transfer/success?encrypt=${encrypted}`);
     } else if (status === 'terminate') {
-      return res.redirect(`http://localhost:5000/transfer/terminate?encrypt=${encrypted}`);
+      return res.redirect(`https://tooltest.onrender.com/transfer/terminate?encrypt=${encrypted}`);
     } else if (status === 'quotafull') {
-      return res.redirect(`http://localhost:5000/transfer/quotafull?encrypt=${encrypted}`);
+      return res.redirect(`https://tooltest.onrender.com/transfer/quotafull?encrypt=${encrypted}`);
     } else {
       // Default: still send to survey link with UID replaced
       const finalSurveyLink = project.surveyLink.replace('[UID]', toid);
