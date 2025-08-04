@@ -10,59 +10,118 @@ exports.handleRedirect = async (req, res) => {
 
   // Validate inputs
   if (!code || !toid) {
+    console.error('Missing required parameters:', { code, toid });
     return res.status(400).send('Missing code or toid parameter');
   }
 
   try {
     // Decode PID
-    const pid = Buffer.from(code, 'base64').toString('utf-8');
-    const project = await Project.findOne({ pid });
+    let pid;
+    try {
+      pid = Buffer.from(code, 'base64').toString('utf-8');
+    } catch (err) {
+      console.error('Base64 decode error:', { code, error: err.message });
+      return res.status(400).send('Invalid code format');
+    }
+
+    // Find project
+    const project = await Project.findOne({ pid }).lean();
     if (!project) {
+      console.error('Project not found:', { pid });
       return res.status(404).send('Invalid PID');
     }
 
     // Get IP and user agent
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
+    const ip =
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.socket.remoteAddress ||
+      'unknown';
     const userAgent = req.headers['user-agent'] || 'unknown';
 
     // Fetch geolocation
     let location = {};
     try {
-      const geo = await axios.get(`http://ip-api.com/json/${ip}`);
+      const geo = await axios.get(`http://ip-api.com/json/${ip}`, {
+        timeout: 5000, // 5-second timeout
+      });
       location = geo.data || { error: 'Geo lookup failed' };
-    } catch {
-      location = { error: 'Geo lookup failed' };
+    } catch (err) {
+      console.error('Geolocation API error:', {
+        ip,
+        error: err.message,
+      });
+      location = { error: 'Geo lookup failed', details: err.message };
     }
 
     // Log the redirect
-    await RedirectLog.create({
-      uid: toid,
-      pid,
-      projectName: project.name,
-      status: status || 'redirected',
-      fingerprint: fingerprint || null,
-      ip,
-      userAgent,
-      location,
-      createdAt: new Date(),
-    });
+    try {
+      await RedirectLog.create({
+        uid: toid,
+        pid,
+        projectName: project.name || '',
+        status: status || 'redirected',
+        fingerprint: fingerprint || null,
+        ip,
+        userAgent,
+        location,
+        createdAt: new Date(),
+      });
+    } catch (err) {
+      console.error('RedirectLog create error:', {
+        uid: toid,
+        pid,
+        error: err.message,
+      });
+      // Continue to redirect even if logging fails
+    }
 
     // Encrypt payload for survey callback
-    const payload = JSON.stringify({ uid: toid, pid, fingerprint: fingerprint || null });
-    const encrypted = Buffer.from(payload).toString('base64');
+    const payload = JSON.stringify({
+      uid: toid,
+      pid,
+      fingerprint: fingerprint || null,
+    });
+    let encrypted;
+    try {
+      encrypted = Buffer.from(payload).toString('base64');
+    } catch (err) {
+      console.error('Payload encryption error:', { payload, error: err.message });
+      return res.status(500).send('Server error: Failed to encrypt payload');
+    }
 
     // Construct final survey link
-    const finalSurveyLink = project.surveyLink
-      .replace('[UID]', toid)
-      .concat(`&encrypt=${encrypted}`);
+    let finalSurveyLink;
+    try {
+      finalSurveyLink = project.surveyLink
+        .replace('[UID]', encodeURIComponent(toid))
+        .concat(`&encrypt=${encodeURIComponent(encrypted)}`);
+    } catch (err) {
+      console.error('Survey link construction error:', {
+        surveyLink: project.surveyLink,
+        toid,
+        error: err.message,
+      });
+      return res.status(500).send('Server error: Invalid survey link format');
+    }
 
+    // Validate final survey link
+    if (!finalSurveyLink.startsWith('http')) {
+      console.error('Invalid survey link:', { finalSurveyLink });
+      return res.status(500).send('Server error: Invalid survey link');
+    }
+
+    console.log('Redirecting to:', { finalSurveyLink });
     return res.redirect(finalSurveyLink);
   } catch (err) {
-    console.error('Redirect Error:', err);
-    res.status(500).send('Server error');
+    console.error('HandleRedirect error:', {
+      code,
+      toid,
+      error: err.message,
+      stack: err.stack,
+    });
+    return res.status(500).send('Server error');
   }
 };
-
 
 // exports.handleRedirect = async (req, res) => {
 //   const { code } = req.params;
